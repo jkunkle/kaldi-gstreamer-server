@@ -177,15 +177,27 @@ class ServerWebsocket(WebSocketClient):
     def _on_result(self, result, final):
         try:
             self._increment_num_processing(1)
+            logger.info( '_on_result: Increment thread count to %d' %( self.num_processing_threads ) )
             if final:
+                logger.info( 'FINAL, return')
                 # final results are handled by _on_full_result()
                 return
             self.last_decoder_message = time.time()
             if self.last_partial_result == result:
+                logger.info( 'self.last_partial_result == result, return')
                 return
             self.last_partial_result = result
+            print (result)
             logger.info("%s: Postprocessing (final=%s) result.."  % (self.request_id, final))
             processed_transcripts = yield self.post_process([result], blocking=False)
+            #post_process_result = self.post_process([result], blocking=False)
+            #print ('POST PROCESS RESULT')
+            #print (post_process_result)
+            ## ------------
+            ## this just bails because send doesn't exist
+            ##processed_transcripts = post_process_result.send()
+            ## ------------
+            #yield post_process_result
             if processed_transcripts:
                 logger.info("%s: Postprocessing done." % self.request_id)
                 event = dict(status=common.STATUS_SUCCESS,
@@ -196,13 +208,18 @@ class ServerWebsocket(WebSocketClient):
                 except:
                     e = sys.exc_info()[1]
                     logger.warning("Failed to send event to master: %s" % e)
+        except : 
+            logger.error( 'GOT TO WHERE THERE WAS NO MESSAGE')
+            logger.error( sys.exc_info()[1] )
         finally:
             self._increment_num_processing(-1)
+            logger.info( '_on_result : decrement thread count to %d' %( self.num_processing_threads ) )
     
     @tornado.gen.coroutine                     
     def _on_full_result(self, full_result_json):
         try:
             self._increment_num_processing(1)
+            logger.info( '_on_full_result: Increment thread count to %d' %( self.num_processing_threads ) )
             
             self.last_decoder_message = time.time()
             full_result = json.loads(full_result_json)
@@ -231,11 +248,14 @@ class ServerWebsocket(WebSocketClient):
                     logger.warning("Failed to send event to master: %s" % e)
         finally:
             self._increment_num_processing(-1)
+            logger.info( '_on_full_result: decrement thread count to %d' %( self.num_processing_threads ) )
     
     @tornado.gen.coroutine
     def _on_word(self, word):
+        logger.info( '_on_word %s ' %word )
         try:
             self._increment_num_processing(1)
+            logger.info( '_on_word: Increment thread count to %d' %( self.num_processing_threads ) )
             
             self.last_decoder_message = time.time()
             if word != "<#s>":
@@ -263,6 +283,7 @@ class ServerWebsocket(WebSocketClient):
                 self.num_segments += 1
         finally:
             self._increment_num_processing(-1)
+            logger.info( '_on_word: decrement thread count to %d' %( self.num_processing_threads ) )
 
     @tornado.gen.coroutine
     def _on_eos(self, data=None):
@@ -271,6 +292,7 @@ class ServerWebsocket(WebSocketClient):
         # post-processing has finished
         while self.num_processing_threads > 0:
             logging.debug("Waiting until processing threads finish (%d)" % self.num_processing_threads)
+            #time.sleep(1)
             yield self.processing_condition.wait()
         
         self.state = self.STATE_FINISHED
@@ -311,9 +333,12 @@ class ServerWebsocket(WebSocketClient):
             if blocking:
                 timeout=None
             else:
-                timeout=0.0
+                timeout=0.1
             try:
+                logging.debug('Try to get lock, timeout = %s' %(str(timeout)))
+                logging.debug('Have texts : %s' %(str(texts)))
                 #with (yield self.post_processor_lock.acquire(timeout)) as blah:
+                logging.debug('Got lock')
                 result = []
                 for text in texts:
                     self.post_processor.stdin.write("%s\n" % text.encode("utf-8"))
