@@ -151,7 +151,7 @@ class ServerWebsocket(WebSocketClient):
             counter = 0
             while self.state == self.STATE_CANCELLING:
                 counter += 1
-                if counter > 30:
+                if counter > 1:
                     # lost hope that the decoder will ever finish, likely it has hung
                     # FIXME: this might introduce new bugs
                     logger.info("%s: Giving up waiting after %d tries" % (self.request_id, counter))
@@ -313,19 +313,19 @@ class ServerWebsocket(WebSocketClient):
             else:
                 timeout=0.0
             try:
-                with (yield self.post_processor_lock.acquire(timeout)):
-                    result = []
-                    for text in texts:
-                        self.post_processor.stdin.write("%s\n" % text.encode("utf-8"))
-                        self.post_processor.stdin.flush()
-                        logging.debug("%s: Starting postprocessing: %s"  % (self.request_id, text))
-                        text = yield self.post_processor.stdout.read_until('\n')
-                        text = text.decode("utf-8")
-                        logging.debug("%s: Postprocessing returned: %s"  % (self.request_id, text))
-                        text = text.strip()
-                        text = text.replace("\\n", "\n")
-                        result.append(text)
-                    raise tornado.gen.Return(result)
+                #with (yield self.post_processor_lock.acquire(timeout)) as blah:
+                result = []
+                for text in texts:
+                    self.post_processor.stdin.write("%s\n" % text.encode("utf-8"))
+                    self.post_processor.stdin.flush()
+                    logging.debug("%s: Starting postprocessing: %s"  % (self.request_id, text))
+                    text = yield self.post_processor.stdout.read_until('\n')
+                    text = text.decode("utf-8")
+                    logging.debug("%s: Postprocessing returned: %s"  % (self.request_id, text))
+                    text = text.strip()
+                    text = text.replace("\\n", "\n")
+                    result.append(text)
+                raise tornado.gen.Return(result)
             except tornado.gen.TimeoutError:
                 logging.debug("%s: Skipping postprocessing since post-processor already in use"  % (self.request_id))
                 raise tornado.gen.Return(None)
